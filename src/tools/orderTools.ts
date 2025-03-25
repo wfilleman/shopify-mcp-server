@@ -126,6 +126,20 @@ const GET_ORDER = `
   }
 `;
 
+// Query to find an order by its order number (e.g., #1001)
+const FIND_ORDER_BY_NUMBER = `
+  ${ORDER_FRAGMENT}
+  query FindOrderByNumber($query: String!) {
+    orders(first: 1, query: $query) {
+      edges {
+        node {
+          ...OrderDetails
+        }
+      }
+    }
+  }
+`;
+
 const GET_ACTIVE_ORDERS = `
   ${ORDER_FRAGMENT}
   query GetActiveOrders($first: Int!) {
@@ -212,21 +226,42 @@ export function registerOrderTools(server: McpServer) {
     'get-order-details',
     'Get detailed information about a specific order',
     {
-      orderId: z.string().describe('The ID or name of the order (e.g., #1001)'),
+      orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
     },
     async ({ orderId }) => {
       try {
-        const formattedId = orderId.startsWith('#') 
-          ? `gid://shopify/Order/${orderId.substring(1)}` 
-          : orderId;
+        // Check if it's a friendly order number like "#1001" or "1001"
+        const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
         
-        const response = await executeGraphQL<OrderResponse>(GET_ORDER, { id: formattedId });
-        
-        if (!response.order) {
-          return formatErrorResponse(`Order ${orderId} not found`);
+        if (isOrderNumber) {
+          // Extract just the number part if it has a # prefix
+          const orderNumber = orderId.replace(/^#/, '');
+          
+          // Find by order number using the query parameter
+          const response = await executeGraphQL<{ orders: { edges: Array<{ node: any }> } }>(
+            FIND_ORDER_BY_NUMBER, 
+            { query: `name:${orderNumber}` }
+          );
+          
+          if (!response.orders || !response.orders.edges || response.orders.edges.length === 0) {
+            return formatErrorResponse(`Order ${orderId} not found`);
+          }
+          
+          return formatOrderResponse(response.orders.edges[0].node);
+        } else {
+          // It's a Shopify ID (either gid:// format or needs to be converted)
+          const formattedId = orderId.includes('gid://shopify/Order/')
+            ? orderId
+            : `gid://shopify/Order/${orderId}`;
+          
+          const response = await executeGraphQL<OrderResponse>(GET_ORDER, { id: formattedId });
+          
+          if (!response.order) {
+            return formatErrorResponse(`Order ${orderId} not found`);
+          }
+          
+          return formatOrderResponse(response.order);
         }
-        
-        return formatOrderResponse(response.order);
       } catch (error) {
         return formatErrorResponse(error instanceof Error ? error : String(error));
       }
@@ -258,7 +293,7 @@ export function registerOrderTools(server: McpServer) {
     'request-fulfillment',
     'Fulfill an order with optional tracking information',
     {
-      orderId: z.string().describe('The ID of the order to fulfill'),
+      orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
       lineItems: z.array(
         z.object({
           id: z.string().describe('Line item ID'),
@@ -271,6 +306,31 @@ export function registerOrderTools(server: McpServer) {
     },
     async ({ orderId, lineItems, trackingNumber, trackingCompany, trackingUrl }) => {
       try {
+        // Check if it's a friendly order number and convert it to an ID if needed
+        const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
+        let shopifyOrderId = orderId;
+        
+        if (isOrderNumber) {
+          // Extract just the number part if it has a # prefix
+          const orderNumber = orderId.replace(/^#/, '');
+          
+          // Find the order by its number first
+          const response = await executeGraphQL<{ orders: { edges: Array<{ node: any }> } }>(
+            FIND_ORDER_BY_NUMBER, 
+            { query: `name:${orderNumber}` }
+          );
+          
+          if (!response.orders || !response.orders.edges || response.orders.edges.length === 0) {
+            return formatErrorResponse(`Order ${orderId} not found`);
+          }
+          
+          // Use the actual Shopify ID for the fulfillment
+          shopifyOrderId = response.orders.edges[0].node.id;
+        } else if (!orderId.includes('gid://shopify/Order/')) {
+          // Convert plain IDs to Shopify GraphQL IDs
+          shopifyOrderId = `gid://shopify/Order/${orderId}`;
+        }
+        
         const lineItemInputs = lineItems.map(item => ({
           lineItemId: item.id,
           quantity: item.quantity,
@@ -285,7 +345,7 @@ export function registerOrderTools(server: McpServer) {
           : undefined;
         
         const response = await executeGraphQL<FulfillmentCreateResponse>(FULFILL_ORDER, {
-          orderId,
+          orderId: shopifyOrderId,
           lineItems: lineItemInputs,
           trackingInfo,
         });
@@ -344,11 +404,36 @@ export function registerOrderTools(server: McpServer) {
     'archive-order',
     'Archive an order',
     {
-      orderId: z.string().describe('The ID of the order to archive'),
+      orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
     },
     async ({ orderId }) => {
       try {
-        const response = await executeGraphQL<OrderArchiveResponse>(ARCHIVE_ORDER, { id: orderId });
+        // Check if it's a friendly order number and convert it to an ID if needed
+        const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
+        let shopifyOrderId = orderId;
+        
+        if (isOrderNumber) {
+          // Extract just the number part if it has a # prefix
+          const orderNumber = orderId.replace(/^#/, '');
+          
+          // Find the order by its number first
+          const response = await executeGraphQL<{ orders: { edges: Array<{ node: any }> } }>(
+            FIND_ORDER_BY_NUMBER, 
+            { query: `name:${orderNumber}` }
+          );
+          
+          if (!response.orders || !response.orders.edges || response.orders.edges.length === 0) {
+            return formatErrorResponse(`Order ${orderId} not found`);
+          }
+          
+          // Use the actual Shopify ID for the archive operation
+          shopifyOrderId = response.orders.edges[0].node.id;
+        } else if (!orderId.includes('gid://shopify/Order/')) {
+          // Convert plain IDs to Shopify GraphQL IDs
+          shopifyOrderId = `gid://shopify/Order/${orderId}`;
+        }
+        
+        const response = await executeGraphQL<OrderArchiveResponse>(ARCHIVE_ORDER, { id: shopifyOrderId });
         
         const { order, userErrors } = response.orderArchive;
         

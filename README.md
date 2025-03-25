@@ -60,17 +60,27 @@ A Model Context Protocol (MCP) server for integrating Shopify operations with LL
 
 This server implements the Model Context Protocol (MCP) and exposes the following tools:
 
-- `get-order-details`: Get detailed information about a specific order
+- `get-order-details`: Get detailed information about a specific order (accepts friendly order numbers like "#1001")
 - `get-active-orders`: Get a list of all active orders
-- `request-fulfillment`: Fulfill an order with optional tracking information
+- `request-fulfillment`: Fulfill an order with optional tracking information (accepts friendly order numbers)
 - `add-tracking`: Add tracking information to a fulfilled order
-- `archive-order`: Archive an order
+- `archive-order`: Archive an order (accepts friendly order numbers)
+
+### Using Friendly Order Numbers
+
+All tools that require an order ID now accept friendly order numbers:
+
+- `#1001` - Order number with # prefix
+- `1001` - Order number without # prefix
+- Full Shopify ID (gid://shopify/Order/12345) - Still supported
+
+The system will automatically look up the correct Shopify ID when you provide a friendly order number.
 
 ### Updating Tracking Information
 
 To update tracking information for an order, follow these steps:
 
-1. First, get the order details using `get-order-details` with the order ID
+1. First, get the order details using `get-order-details` with the order number (e.g., `#1001`)
 2. From the response, find the fulfillment ID in the "Fulfillments" section
 3. Use the `add-tracking` tool with the fulfillment ID and tracking information:
    ```
