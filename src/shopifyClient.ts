@@ -13,7 +13,7 @@ const shopify = shopifyApi({
   apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
   scopes: (process.env.SHOPIFY_SCOPES || '').split(','),
   hostName: process.env.SHOPIFY_SHOP || '',
-  apiVersion: ApiVersion.April24 || LATEST_API_VERSION, // Use the 2024-04 version that matches Shopify's headers
+  apiVersion: LATEST_API_VERSION, // Use the latest available API version (2025-01 currently)
   isEmbeddedApp: false,
   logger: {
     log: (severity, message) => {

@@ -66,6 +66,16 @@ This server implements the Model Context Protocol (MCP) and exposes the followin
 - `add-tracking`: Add tracking information to a fulfilled order
 - `archive-order`: Archive an order
 
+## Technical Details
+
+### API Version Management
+
+This server uses Shopify's `LATEST_API_VERSION` constant (currently 2025-01) to ensure compatibility with the newest API features. This future-proofs the application but may occasionally require schema adjustments when Shopify makes breaking changes to their API.
+
+### PII Handling
+
+To support stores on all Shopify plans, this server avoids requesting personally identifiable information (PII) like customer details, emails, and addresses, which are restricted to higher-tier Shopify plans.
+
 ## License
 
 ISC
