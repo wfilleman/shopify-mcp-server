@@ -20,12 +20,56 @@ class ShopifyMcpServer extends McpServer {
   async handlePromptsList() {
     return { prompts: [] };
   }
+  
+  // Override to handle tools list request
+  async handleToolsList() {
+    // Get the registered tools from parent class implementation
+    const result = await super.handleToolsList();
+    console.error('Tools list requested:', JSON.stringify(result, null, 2));
+    return result;
+  }
+  
+  // Add a custom method handler for any unsupported methods
+  async handleJsonRpcRequest(method: string, params: any, requestId: string | number) {
+    console.error(`Received RPC request: ${method} with ID ${requestId}`);
+    
+    // Try the parent implementation first
+    try {
+      return await super.handleJsonRpcRequest(method, params, requestId);
+    } catch (error) {
+      // If the parent implementation throws a "method not found" error,
+      // we'll handle common MCP methods that we haven't explicitly implemented
+      if (error instanceof Error && error.message.includes('Method not found')) {
+        console.error(`Handling unimplemented method: ${method}`);
+        
+        // Handle known MCP methods with empty results
+        switch (method) {
+          case 'prompts/list':
+            return { prompts: [] };
+          case 'resources/list':
+            return { resources: [] };
+          default:
+            // Re-throw for truly unknown methods
+            throw error;
+        }
+      }
+      
+      // For other errors, just re-throw
+      throw error;
+    }
+  }
 }
 
-// Create MCP server instance
+// Create MCP server instance with metadata
 const server = new ShopifyMcpServer({
   name: 'shopify',
   version: '1.0.0',
+  description: 'Shopify order management tools for LLM agents',
+  contact: {
+    name: 'Shopify MCP Support',
+    url: 'https://github.com/yourusername/shopify-mcp-server/issues'
+  },
+  logoUrl: 'https://cdn.shopify.com/shopifycloud/brochure/assets/brand-assets/shopify-logo-primary-logo-456baa801ee66a0a435671082365958316831c9960c480451dd0330bcdae304f.svg'
 });
 
 // Register all tools
@@ -81,10 +125,23 @@ async function main() {
     // Initialize transport
     const transport = new StdioServerTransport();
     
+    // Log startup information
+    console.error('Starting Shopify MCP Server...');
+    console.error(`Shopify shop: ${process.env.SHOPIFY_SHOP}`);
+    console.error(`API key defined: ${!!process.env.SHOPIFY_API_KEY}`);
+    console.error(`API token defined: ${!!process.env.SHOPIFY_ACCESS_TOKEN}`);
+    
     // Connect the server to the transport
     await server.connect(transport);
+
+    // List all registered tools for diagnostics
+    const toolsList = await server.handleToolsList();
+    console.error('Registered tools:');
+    toolsList.tools.forEach((tool: any) => {
+      console.error(`- ${tool.name}: ${tool.description}`);
+    });
     
-    console.error('Shopify MCP Server running on stdio');
+    console.error('Shopify MCP Server running successfully on stdio');
   } catch (error) {
     console.error('Fatal error in main():', error);
     process.exit(1);
