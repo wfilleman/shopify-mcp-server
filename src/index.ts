@@ -5,14 +5,55 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerOrderTools } from './tools/orderTools.js';
 import './shopifyClient.js';
 
+// Create a custom McpServer subclass to handle unimplemented methods
+class ShopifyMcpServer extends McpServer {
+  constructor(options: any) {
+    super(options);
+  }
+
+  // Override to provide empty resources list
+  async handleResourcesList() {
+    return { resources: [] };
+  }
+
+  // Override to provide empty prompts list
+  async handlePromptsList() {
+    return { prompts: [] };
+  }
+}
+
 // Create MCP server instance
-const server = new McpServer({
+const server = new ShopifyMcpServer({
   name: 'shopify',
   version: '1.0.0',
 });
 
 // Register all tools
 registerOrderTools(server);
+
+// Redirect console.log to console.error to avoid interfering with stdout
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+  console.error(...args);
+};
+
+// Suppress stdout output from Shopify API
+if (process.env.NODE_ENV !== 'test') {
+  // Redirect stdout writes to stderr
+  const stdoutWrite = process.stdout.write;
+  // @ts-ignore - TypeScript doesn't like modifying the write method, but it works
+  process.stdout.write = function(chunk: any, encoding?: any, callback?: any) {
+    // If it looks like a log message, redirect to stderr
+    if (typeof chunk === 'string' && 
+        (chunk.includes('[shopify-api') || 
+         chunk.includes('Future flag') || 
+         chunk.includes('Enable this'))) {
+      return process.stderr.write(chunk, encoding, callback);
+    }
+    // Otherwise, proceed normally
+    return stdoutWrite.apply(process.stdout, [chunk, encoding, callback]);
+  };
+}
 
 // Main function to start the server
 async function main() {

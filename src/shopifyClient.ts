@@ -15,6 +15,11 @@ const shopify = shopifyApi({
   hostName: process.env.SHOPIFY_SHOP || '',
   apiVersion: ApiVersion.October23 || LATEST_API_VERSION,
   isEmbeddedApp: false,
+  logger: {
+    log: (severity, message) => {
+      console.error(`[shopify-api/${severity}]`, message);
+    }
+  }
 });
 
 // Create session with access token
