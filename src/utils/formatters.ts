@@ -44,11 +44,52 @@ export function formatErrorResponse(error: Error | string): McpResponse {
 
 // Format order data for display
 export function formatOrderResponse(order: any): McpResponse {
+  let orderText = `Order #${order.legacyResourceId || order.name}\n`;
+  orderText += `Status: ${order.displayFulfillmentStatus || 'Unknown'}\n`;
+  orderText += `Created: ${order.createdAt || 'Unknown'}\n`;
+  orderText += `Total: ${order.totalPrice || 'Unknown'}\n\n`;
+  
+  // Add fulfillment information if available
+  if (order.fulfillments && order.fulfillments.edges && order.fulfillments.edges.length > 0) {
+    orderText += `==== Fulfillments ====\n`;
+    order.fulfillments.edges.forEach((edge: any, index: number) => {
+      const fulfillment = edge.node;
+      orderText += `Fulfillment #${index + 1}\n`;
+      orderText += `ID: ${fulfillment.id}\n`;
+      orderText += `Status: ${fulfillment.status || 'Unknown'}\n`;
+      
+      // Add tracking info if available
+      if (fulfillment.trackingInfo && fulfillment.trackingInfo.number) {
+        orderText += `Tracking: ${fulfillment.trackingInfo.number}\n`;
+        if (fulfillment.trackingInfo.company) {
+          orderText += `Carrier: ${fulfillment.trackingInfo.company}\n`;
+        }
+        if (fulfillment.trackingInfo.url) {
+          orderText += `URL: ${fulfillment.trackingInfo.url}\n`;
+        }
+      } else {
+        orderText += `Tracking: None\n`;
+      }
+      orderText += `Created: ${fulfillment.createdAt}\n\n`;
+    });
+  } else {
+    orderText += `No fulfillments found for this order.\n`;
+  }
+  
+  // Add line items
+  if (order.lineItems && order.lineItems.edges && order.lineItems.edges.length > 0) {
+    orderText += `==== Line Items ====\n`;
+    order.lineItems.edges.forEach((edge: any, index: number) => {
+      const item = edge.node;
+      orderText += `${item.quantity}x ${item.name}\n`;
+    });
+  }
+
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(order, null, 2),
+        text: orderText,
       },
     ],
   };

@@ -66,6 +66,23 @@ This server implements the Model Context Protocol (MCP) and exposes the followin
 - `add-tracking`: Add tracking information to a fulfilled order
 - `archive-order`: Archive an order
 
+### Updating Tracking Information
+
+To update tracking information for an order, follow these steps:
+
+1. First, get the order details using `get-order-details` with the order ID
+2. From the response, find the fulfillment ID in the "Fulfillments" section
+3. Use the `add-tracking` tool with the fulfillment ID and tracking information:
+   ```
+   {
+     "fulfillmentId": "gid://shopify/Fulfillment/123456789",
+     "trackingNumber": "1Z999AA10123456789",
+     "trackingCompany": "UPS",
+     "trackingUrl": "https://www.ups.com/track?tracknum=1Z999AA10123456789",
+     "notifyCustomer": true
+   }
+   ```
+
 ## Technical Details
 
 ### API Version Management
