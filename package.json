@@ -1,5 +1,5 @@
 {
-  "name": "shopify-mcp-server",
+  "name": "@wfilleman/shopify-mcp-server",
   "version": "1.0.0",
   "main": "dist/index.js",
   "type": "module",
@@ -12,7 +12,9 @@
     "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "npm run build",
+    "publish": "npm publish --access public"
   },
   "bin": {
     "shopify-mcp": "./dist/index.js"
@@ -20,7 +22,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CLAUDE.md"
   ],
   "keywords": [
     "shopify",
@@ -29,9 +32,17 @@
     "llm",
     "agent"
   ],
-  "author": "",
+  "author": "Wesley Filleman <wfilleman@gmail.com>",
   "license": "ISC",
   "description": "Shopify MCP Server for LLM Agent Integration",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wfilleman/shopify-mcp-server.git"
+  },
+  "homepage": "https://github.com/wfilleman/shopify-mcp-server",
+  "bugs": {
+    "url": "https://github.com/wfilleman/shopify-mcp-server/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.7.0",
     "@shopify/shopify-api": "^11.11.1",
