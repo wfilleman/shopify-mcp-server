@@ -54,7 +54,15 @@ export async function executeGraphQL<T>(
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
-      throw new Error(response.body.errors[0].message);
+      const errorMessage = response.body.errors[0].message;
+      
+      // Check for permission-related errors
+      if (errorMessage.includes('not approved to access')) {
+        console.error('Permission error:', errorMessage);
+        console.error('Consider updating Shopify API scopes to include required permissions');
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return response.body.data;

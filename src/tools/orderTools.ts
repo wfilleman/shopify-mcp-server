@@ -76,11 +76,6 @@ const ORDER_FRAGMENT = `
     cancelledAt
     displayFulfillmentStatus
     displayFinancialStatus
-    customer {
-      id
-      displayName
-      email
-    }
     shippingAddress {
       address1
       address2
