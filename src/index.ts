@@ -15,7 +15,7 @@ class ShopifyMcpServer extends McpServer {
   }
   
   private setupRequestHandlers() {
-    // Set up handlers for resource listing
+    // Set up handlers for resource listing - this server doesn't provide resources
     this.server.setRequestHandler({
       method: 'resources/list' as any
     } as any, async () => {
@@ -23,7 +23,7 @@ class ShopifyMcpServer extends McpServer {
       return { resources: [] };
     });
     
-    // Set up handlers for prompts listing
+    // Set up handlers for prompts listing - this server doesn't provide prompts
     this.server.setRequestHandler({
       method: 'prompts/list' as any
     } as any, async () => {
@@ -31,11 +31,45 @@ class ShopifyMcpServer extends McpServer {
       return { prompts: [] };
     });
     
-    // Log all received requests
+    // Set up handler for tools listing to ensure it returns accurate data
+    this.server.setRequestHandler({
+      method: 'tools/list' as any
+    } as any, async () => {
+      console.error('Handling tools/list request');
+      
+      // Get tools directly from the internal registry
+      const registeredTools = (this as any)._registeredTools || {};
+      
+      // Convert to the expected format for the tools/list response
+      const tools = Object.entries(registeredTools).map(([name, tool]: [string, any]) => {
+        return {
+          name,
+          description: tool.description || `Shopify ${name} tool`,
+          parameters: tool.schema || {},
+          // Include any other required properties
+        };
+      });
+      
+      console.error(`Returning ${tools.length} tools`);
+      return { tools };
+    });
+    
+    // Log all received requests and provide a sensible fallback
     this.server.fallbackRequestHandler = async (request) => {
       console.error(`Received unhandled request: ${request.method}`, JSON.stringify(request.params));
-      // Return an empty result
-      return {} as any;
+      
+      // Return appropriate empty responses based on the method
+      switch (request.method) {
+        case 'resources/list':
+          return { resources: [] };
+        case 'prompts/list':
+          return { prompts: [] };
+        case 'tools/list':
+          return { tools: [] }; 
+        default:
+          // Default empty response
+          return {} as any;
+      }
     };
   }
 }
