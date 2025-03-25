@@ -4,7 +4,11 @@ import '@shopify/shopify-api/adapters/node';
 // Define type for GraphQL response
 export interface GraphQLResponse<T> {
   data: T;
-  errors?: Array<{ message: string }>;
+  errors?: Array<{ 
+    message: string;
+    locations?: Array<{ line: number; column: number }>;
+    path?: string[];
+  }>;
 }
 
 // Initialize Shopify API
@@ -46,6 +50,10 @@ export async function executeGraphQL<T>(
   variables: Record<string, any> = {}
 ): Promise<T> {
   try {
+    // Log the query and variables for debugging
+    console.error('Executing GraphQL query:', query.split('\n')[0].trim());
+    console.error('Variables:', JSON.stringify(variables, null, 2));
+    
     // For backwards compatibility, use the query method
     const response = await graphqlClient.query<GraphQLResponse<T>>({
       data: {
@@ -54,13 +62,36 @@ export async function executeGraphQL<T>(
       }
     });
 
+    // Log the response structure for debugging
+    console.error('Response structure:', 
+      JSON.stringify({
+        hasData: !!response.body.data,
+        hasErrors: !!response.body.errors,
+        errorCount: response.body.errors?.length || 0,
+        dataKeys: response.body.data ? Object.keys(response.body.data) : []
+      }, null, 2)
+    );
+
     if (response.body.errors && response.body.errors.length > 0) {
       const errorMessage = response.body.errors[0].message;
+      const locations = response.body.errors[0].locations;
+      const path = response.body.errors[0].path;
       
-      // Check for permission-related errors
+      // Log detailed error information
+      console.error('GraphQL Error:', {
+        message: errorMessage,
+        locations,
+        path,
+        variables
+      });
+      
+      // Check for specific error types
       if (errorMessage.includes('not approved to access')) {
         console.error('Permission error:', errorMessage);
         console.error('Consider updating Shopify API scopes to include required permissions');
+      } else if (errorMessage.includes('doesn\'t exist on type')) {
+        console.error('Schema error:', errorMessage);
+        console.error('The GraphQL schema has changed or the field doesn\'t exist');
       }
       
       throw new Error(errorMessage);
@@ -69,6 +100,9 @@ export async function executeGraphQL<T>(
     return response.body.data;
   } catch (error) {
     console.error('GraphQL request failed:', error);
+    if (error instanceof Error && error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
     throw error;
   }
 }

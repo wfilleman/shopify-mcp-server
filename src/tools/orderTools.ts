@@ -372,6 +372,16 @@ export function registerOrderTools(server: McpServer) {
     },
     async ({ fulfillmentId, trackingNumber, trackingCompany, trackingUrl, notifyCustomer }) => {
       try {
+        console.error('Adding tracking info with params:', JSON.stringify({
+          fulfillmentId,
+          trackingInfoInput: {
+            number: trackingNumber,
+            company: trackingCompany,
+            url: trackingUrl,
+          },
+          notifyCustomer,
+        }, null, 2));
+        
         const response = await executeGraphQL<FulfillmentTrackingInfoUpdateResponse>(ADD_TRACKING_INFO, {
           fulfillmentId,
           trackingInfoInput: {
@@ -382,15 +392,28 @@ export function registerOrderTools(server: McpServer) {
           notifyCustomer,
         });
         
+        // Check if response is valid
+        if (!response || !response.fulfillmentTrackingInfoUpdate) {
+          console.error('Invalid response structure:', JSON.stringify(response, null, 2));
+          return formatErrorResponse('Invalid response from Shopify API. Check server logs for details.');
+        }
+        
         const { fulfillment, userErrors } = response.fulfillmentTrackingInfoUpdate;
         
         if (userErrors && userErrors.length > 0) {
-          return formatErrorResponse(userErrors[0].message);
+          console.error('User errors:', JSON.stringify(userErrors, null, 2));
+          return formatErrorResponse(`Error: ${userErrors[0].message}`);
+        }
+        
+        if (!fulfillment) {
+          console.error('No fulfillment returned:', JSON.stringify(response, null, 2));
+          return formatErrorResponse('Tracking information update failed. No fulfillment data returned.');
         }
         
         return formatTextResponse(`Tracking information added successfully to fulfillment ${fulfillmentId}`);
       } catch (error) {
-        return formatErrorResponse(error instanceof Error ? error : String(error));
+        console.error('Exception in add-tracking:', error);
+        return formatErrorResponse(`Tracking information update failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   );
