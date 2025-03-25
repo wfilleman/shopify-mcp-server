@@ -50,10 +50,9 @@ export function formatOrderResponse(order: any): McpResponse {
   orderText += `Total: ${order.totalPrice || 'Unknown'}\n\n`;
   
   // Add fulfillment information if available
-  if (order.fulfillments && order.fulfillments.edges && order.fulfillments.edges.length > 0) {
+  if (order.fulfillments && Array.isArray(order.fulfillments) && order.fulfillments.length > 0) {
     orderText += `==== Fulfillments ====\n`;
-    order.fulfillments.edges.forEach((edge: any, index: number) => {
-      const fulfillment = edge.node;
+    order.fulfillments.forEach((fulfillment: any, index: number) => {
       orderText += `Fulfillment #${index + 1}\n`;
       orderText += `ID: ${fulfillment.id}\n`;
       orderText += `Status: ${fulfillment.status || 'Unknown'}\n`;

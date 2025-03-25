@@ -96,18 +96,14 @@ const ORDER_FRAGMENT = `
       }
     }
     fulfillments(first: 5) {
-      edges {
-        node {
-          id
-          status
-          trackingInfo {
-            company
-            number
-            url
-          }
-          createdAt
-        }
+      id
+      status
+      trackingInfo {
+        company
+        number
+        url
       }
+      createdAt
     }
     totalPrice
     subtotalPrice
