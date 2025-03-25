@@ -55,10 +55,11 @@ interface FulfillmentTrackingInfoUpdateResponse {
   };
 }
 
-interface OrderArchiveResponse {
-  orderArchive: {
+interface OrderCloseResponse {
+  orderClose: {
     order: {
       id: string;
+      closed: boolean;
     };
     userErrors: Array<{
       field: string;
@@ -198,11 +199,13 @@ const ADD_TRACKING_INFO = `
   }
 `;
 
-const ARCHIVE_ORDER = `
-  mutation ArchiveOrder($id: ID!) {
-    orderArchive(input: { id: $id }) {
+// Using a different approach for order archiving
+const CLOSE_ORDER = `
+  mutation CloseOrder($input: OrderCloseInput!) {
+    orderClose(input: $input) {
       order {
         id
+        closed
       }
       userErrors {
         field
@@ -488,15 +491,22 @@ export function registerOrderTools(server: McpServer) {
           shopifyOrderId = `gid://shopify/Order/${orderId}`;
         }
         
-        const response = await executeGraphQL<OrderArchiveResponse>(ARCHIVE_ORDER, { id: shopifyOrderId });
+        // Using orderClose as an alternative to archiving
+        console.error(`Closing order (alternative to archiving) - ID: ${shopifyOrderId}`);
+        const response = await executeGraphQL<OrderCloseResponse>(
+          CLOSE_ORDER,
+          { 
+            input: {
+              id: shopifyOrderId
+            }
+          }
+        );
         
-        const { order, userErrors } = response.orderArchive;
-        
-        if (userErrors && userErrors.length > 0) {
-          return formatErrorResponse(userErrors[0].message);
+        if (response.orderClose.userErrors && response.orderClose.userErrors.length > 0) {
+          return formatErrorResponse(response.orderClose.userErrors[0].message);
         }
         
-        return formatTextResponse(`Order ${orderId} archived successfully`);
+        return formatTextResponse(`Order ${orderId} closed successfully. This is the equivalent of archiving in the current API version.`);
       } catch (error) {
         return formatErrorResponse(error instanceof Error ? error : String(error));
       }
