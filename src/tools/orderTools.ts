@@ -37,11 +37,13 @@ interface FulfillmentCreateResponse {
   };
 }
 
-interface FulfillmentUpdateTrackingResponse {
-  fulfillmentUpdateTracking: {
+interface FulfillmentTrackingInfoUpdateResponse {
+  fulfillmentTrackingInfoUpdate: {
     fulfillment: {
       id: string;
+      status?: string;
       trackingInfo: {
+        company?: string;
         number?: string;
         url?: string;
       };
@@ -149,14 +151,17 @@ const FULFILL_ORDER = `
 `;
 
 const ADD_TRACKING_INFO = `
-  mutation FulfillmentUpdateTracking($fulfillmentId: ID!, $trackingInfo: FulfillmentTrackingInput!) {
-    fulfillmentUpdateTracking(
-      fulfillmentId: $fulfillmentId,
-      trackingInfo: $trackingInfo
+  mutation FulfillmentTrackingInfoUpdate($fulfillmentId: ID!, $trackingInfoInput: FulfillmentTrackingInput!, $notifyCustomer: Boolean) {
+    fulfillmentTrackingInfoUpdate(
+      fulfillmentId: $fulfillmentId, 
+      trackingInfoInput: $trackingInfoInput, 
+      notifyCustomer: $notifyCustomer
     ) {
       fulfillment {
         id
+        status
         trackingInfo {
+          company
           number
           url
         }
@@ -293,19 +298,21 @@ export function registerOrderTools(server: McpServer) {
       trackingNumber: z.string().describe('Tracking number'),
       trackingCompany: z.string().optional().describe('Tracking company'),
       trackingUrl: z.string().optional().describe('Tracking URL'),
+      notifyCustomer: z.boolean().optional().default(true).describe('Whether to notify the customer'),
     },
-    async ({ fulfillmentId, trackingNumber, trackingCompany, trackingUrl }) => {
+    async ({ fulfillmentId, trackingNumber, trackingCompany, trackingUrl, notifyCustomer }) => {
       try {
-        const response = await executeGraphQL<FulfillmentUpdateTrackingResponse>(ADD_TRACKING_INFO, {
+        const response = await executeGraphQL<FulfillmentTrackingInfoUpdateResponse>(ADD_TRACKING_INFO, {
           fulfillmentId,
-          trackingInfo: {
+          trackingInfoInput: {
             number: trackingNumber,
             company: trackingCompany,
             url: trackingUrl,
           },
+          notifyCustomer,
         });
         
-        const { fulfillment, userErrors } = response.fulfillmentUpdateTracking;
+        const { fulfillment, userErrors } = response.fulfillmentTrackingInfoUpdate;
         
         if (userErrors && userErrors.length > 0) {
           return formatErrorResponse(userErrors[0].message);
