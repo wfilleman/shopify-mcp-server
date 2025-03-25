@@ -17,13 +17,18 @@ const shopify = shopifyApi({
   isEmbeddedApp: false,
 });
 
-// Create session
+// Create session with access token
 const session = shopify.session.customAppSession(
   process.env.SHOPIFY_SHOP || ''
 );
 
+// Set the access token on the session
+session.accessToken = process.env.SHOPIFY_ACCESS_TOKEN || '';
+
 // Initialize GraphQL client
-const graphqlClient = new shopify.clients.Graphql({ session });
+const graphqlClient = new shopify.clients.Graphql({ 
+  session 
+});
 
 /**
  * Execute a GraphQL query against the Shopify API
