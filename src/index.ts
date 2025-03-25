@@ -5,72 +5,41 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerOrderTools } from './tools/orderTools.js';
 import './shopifyClient.js';
 
-// Create a custom McpServer subclass to handle unimplemented methods
+// Create a simplified McpServer class that just uses the SDK as intended
 class ShopifyMcpServer extends McpServer {
   constructor(options: any) {
     super(options);
     
-    // Set up request handlers for common MCP methods
-    this.setupRequestHandlers();
-  }
-  
-  private setupRequestHandlers() {
-    // Set up handlers for resource listing - this server doesn't provide resources
-    this.server.setRequestHandler({
-      method: 'resources/list' as any
-    } as any, async () => {
-      console.error('Handling resources/list request');
-      return { resources: [] };
-    });
-    
-    // Set up handlers for prompts listing - this server doesn't provide prompts
-    this.server.setRequestHandler({
-      method: 'prompts/list' as any
-    } as any, async () => {
-      console.error('Handling prompts/list request');
-      return { prompts: [] };
-    });
-    
-    // Set up handler for tools listing to ensure it returns accurate data
-    this.server.setRequestHandler({
-      method: 'tools/list' as any
-    } as any, async () => {
-      console.error('Handling tools/list request');
-      
-      // Get tools directly from the internal registry
-      const registeredTools = (this as any)._registeredTools || {};
-      
-      // Convert to the expected format for the tools/list response
-      const tools = Object.entries(registeredTools).map(([name, tool]: [string, any]) => {
-        return {
-          name,
-          description: tool.description || `Shopify ${name} tool`,
-          parameters: tool.schema || {},
-          // Include any other required properties
-        };
-      });
-      
-      console.error(`Returning ${tools.length} tools`);
-      return { tools };
-    });
-    
-    // Log all received requests and provide a sensible fallback
+    // Add fallback behavior for the server - we can let the SDK handle most methods
     this.server.fallbackRequestHandler = async (request) => {
-      console.error(`Received unhandled request: ${request.method}`, JSON.stringify(request.params));
+      console.error(`Received request: ${request.method}`, JSON.stringify(request.params || {}, null, 2));
       
-      // Return appropriate empty responses based on the method
+      // For unsupported methods, return empty responses
       switch (request.method) {
         case 'resources/list':
           return { resources: [] };
         case 'prompts/list':
           return { prompts: [] };
-        case 'tools/list':
-          return { tools: [] }; 
         default:
-          // Default empty response
-          return {} as any;
+          return {}; 
       }
     };
+  }
+  
+  // Log the list of tools when requested for debugging
+  logToolsList() {
+    try {
+      // Access tools through the MCP server's internal representation
+      const registeredTools = (this as any)._registeredTools || {};
+      console.error('Registered tools:');
+      
+      Object.keys(registeredTools).forEach((toolName) => {
+        const tool = registeredTools[toolName];
+        console.error(`- ${toolName}: ${tool.description || 'No description'}`);
+      });
+    } catch (error) {
+      console.error('Error accessing tool list:', error);
+    }
   }
 }
 
@@ -149,18 +118,7 @@ async function main() {
     await server.connect(transport);
 
     // Log registered tools for diagnostics
-    console.error('Registered tools:');
-    
-    // Access tools through the MCP server's internal representation
-    const registeredTools = (server as any)._registeredTools;
-    if (registeredTools) {
-      Object.keys(registeredTools).forEach((toolName) => {
-        const tool = registeredTools[toolName];
-        console.error(`- ${toolName}: ${tool.description || 'No description'}`);
-      });
-    } else {
-      console.error('No tools registered or unable to access tool list');
-    }
+    server.logToolsList();
     
     console.error('Shopify MCP Server running successfully on stdio');
   } catch (error) {
