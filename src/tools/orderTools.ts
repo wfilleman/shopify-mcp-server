@@ -70,21 +70,11 @@ const ORDER_FRAGMENT = `
   fragment OrderDetails on Order {
     id
     name
-    email
-    phone
+    orderNumber
     createdAt
     cancelledAt
     displayFulfillmentStatus
     displayFinancialStatus
-    shippingAddress {
-      address1
-      address2
-      city
-      province
-      country
-      zip
-      phone
-    }
     lineItems(first: 10) {
       edges {
         node {

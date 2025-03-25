@@ -61,9 +61,8 @@ export function formatOrdersListResponse(orders: any[]): McpResponse {
   }
   
   const ordersText = orders.map(order => {
-    return `Order #${order.name || order.id}\n` +
+    return `Order #${order.name || order.orderNumber || order.id}\n` +
            `Status: ${order.displayFulfillmentStatus || 'Unknown'}\n` +
-           `Email: ${order.email || 'Unknown'}\n` +
            `Date: ${order.createdAt || 'Unknown'}\n` +
            `Total: ${order.totalPrice || 'Unknown'}\n` +
            `---`;
