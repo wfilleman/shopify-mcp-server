@@ -372,8 +372,15 @@ export function registerOrderTools(server: McpServer) {
     },
     async ({ fulfillmentId, trackingNumber, trackingCompany, trackingUrl, notifyCustomer }) => {
       try {
+        // Try both formats of the fulfillment ID (GID and raw ID)
+        let formattedFulfillmentId = fulfillmentId;
+        
+        // If the ID is already in GID format, keep it as is for the first attempt
+        // We'll try with numeric ID only if this fails
+        console.error(`Using fulfillment ID: ${formattedFulfillmentId}`);
+        
         console.error('Adding tracking info with params:', JSON.stringify({
-          fulfillmentId,
+          fulfillmentId: formattedFulfillmentId,
           trackingInfoInput: {
             number: trackingNumber,
             company: trackingCompany,
@@ -382,15 +389,44 @@ export function registerOrderTools(server: McpServer) {
           notifyCustomer,
         }, null, 2));
         
-        const response = await executeGraphQL<FulfillmentTrackingInfoUpdateResponse>(ADD_TRACKING_INFO, {
-          fulfillmentId,
-          trackingInfoInput: {
-            number: trackingNumber,
-            company: trackingCompany,
-            url: trackingUrl,
-          },
-          notifyCustomer,
-        });
+        let response;
+        try {
+          // First attempt with the original ID format
+          response = await executeGraphQL<FulfillmentTrackingInfoUpdateResponse>(ADD_TRACKING_INFO, {
+            fulfillmentId: formattedFulfillmentId,
+            trackingInfoInput: {
+              number: trackingNumber,
+              company: trackingCompany,
+              url: trackingUrl,
+            },
+            notifyCustomer,
+          });
+        } catch (initialError) {
+          // If the original format fails and it was a GID, try with just the numeric part
+          if (fulfillmentId.startsWith('gid://shopify/Fulfillment/')) {
+            console.error('First attempt failed, trying with numeric ID only...');
+            const numericId = fulfillmentId.split('/').pop() || fulfillmentId;
+            
+            try {
+              response = await executeGraphQL<FulfillmentTrackingInfoUpdateResponse>(ADD_TRACKING_INFO, {
+                fulfillmentId: numericId,
+                trackingInfoInput: {
+                  number: trackingNumber,
+                  company: trackingCompany,
+                  url: trackingUrl,
+                },
+                notifyCustomer,
+              });
+              console.error(`Success with numeric ID: ${numericId}`);
+            } catch (fallbackError) {
+              console.error('Both ID formats failed:', initialError, fallbackError);
+              throw initialError; // Re-throw the original error
+            }
+          } else {
+            // If it wasn't a GID or other format to try, just re-throw
+            throw initialError;
+          }
+        }
         
         // Check if response is valid
         if (!response || !response.fulfillmentTrackingInfoUpdate) {
