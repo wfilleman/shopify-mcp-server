@@ -32,7 +32,7 @@
     "llm",
     "agent"
   ],
-  "author": "Wesley Filleman <wfilleman@gmail.com>",
+  "author": "Wesley Filleman <wes@mobileintegratedsolutions.com>",
   "license": "ISC",
   "description": "Shopify MCP Server for LLM Agent Integration",
   "repository": {
