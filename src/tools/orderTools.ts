@@ -70,7 +70,7 @@ const ORDER_FRAGMENT = `
   fragment OrderDetails on Order {
     id
     name
-    number
+    orderNumber
     createdAt
     cancelledAt
     displayFulfillmentStatus

@@ -46,11 +46,12 @@ export async function executeGraphQL<T>(
   variables: Record<string, any> = {}
 ): Promise<T> {
   try {
+    // For backwards compatibility, use the query method
     const response = await graphqlClient.query<GraphQLResponse<T>>({
       data: {
         query,
         variables,
-      },
+      }
     });
 
     if (response.body.errors && response.body.errors.length > 0) {
