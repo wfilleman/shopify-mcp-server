@@ -9,54 +9,34 @@ import './shopifyClient.js';
 class ShopifyMcpServer extends McpServer {
   constructor(options: any) {
     super(options);
-  }
-
-  // Override to provide empty resources list
-  async handleResourcesList() {
-    return { resources: [] };
-  }
-
-  // Override to provide empty prompts list
-  async handlePromptsList() {
-    return { prompts: [] };
-  }
-  
-  // Override to handle tools list request
-  async handleToolsList() {
-    // Get the registered tools from parent class implementation
-    const result = await super.handleToolsList();
-    console.error('Tools list requested:', JSON.stringify(result, null, 2));
-    return result;
-  }
-  
-  // Add a custom method handler for any unsupported methods
-  async handleJsonRpcRequest(method: string, params: any, requestId: string | number) {
-    console.error(`Received RPC request: ${method} with ID ${requestId}`);
     
-    // Try the parent implementation first
-    try {
-      return await super.handleJsonRpcRequest(method, params, requestId);
-    } catch (error) {
-      // If the parent implementation throws a "method not found" error,
-      // we'll handle common MCP methods that we haven't explicitly implemented
-      if (error instanceof Error && error.message.includes('Method not found')) {
-        console.error(`Handling unimplemented method: ${method}`);
-        
-        // Handle known MCP methods with empty results
-        switch (method) {
-          case 'prompts/list':
-            return { prompts: [] };
-          case 'resources/list':
-            return { resources: [] };
-          default:
-            // Re-throw for truly unknown methods
-            throw error;
-        }
-      }
-      
-      // For other errors, just re-throw
-      throw error;
-    }
+    // Set up request handlers for common MCP methods
+    this.setupRequestHandlers();
+  }
+  
+  private setupRequestHandlers() {
+    // Set up handlers for resource listing
+    this.server.setRequestHandler({
+      method: 'resources/list' as any
+    } as any, async () => {
+      console.error('Handling resources/list request');
+      return { resources: [] };
+    });
+    
+    // Set up handlers for prompts listing
+    this.server.setRequestHandler({
+      method: 'prompts/list' as any
+    } as any, async () => {
+      console.error('Handling prompts/list request');
+      return { prompts: [] };
+    });
+    
+    // Log all received requests
+    this.server.fallbackRequestHandler = async (request) => {
+      console.error(`Received unhandled request: ${request.method}`, JSON.stringify(request.params));
+      // Return an empty result
+      return {} as any;
+    };
   }
 }
 
@@ -134,12 +114,19 @@ async function main() {
     // Connect the server to the transport
     await server.connect(transport);
 
-    // List all registered tools for diagnostics
-    const toolsList = await server.handleToolsList();
+    // Log registered tools for diagnostics
     console.error('Registered tools:');
-    toolsList.tools.forEach((tool: any) => {
-      console.error(`- ${tool.name}: ${tool.description}`);
-    });
+    
+    // Access tools through the MCP server's internal representation
+    const registeredTools = (server as any)._registeredTools;
+    if (registeredTools) {
+      Object.keys(registeredTools).forEach((toolName) => {
+        const tool = registeredTools[toolName];
+        console.error(`- ${toolName}: ${tool.description || 'No description'}`);
+      });
+    } else {
+      console.error('No tools registered or unable to access tool list');
+    }
     
     console.error('Shopify MCP Server running successfully on stdio');
   } catch (error) {
