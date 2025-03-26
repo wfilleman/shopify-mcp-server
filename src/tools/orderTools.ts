@@ -360,68 +360,85 @@ export function registerOrderTools(server: McpServer) {
   // Request fulfillment
   server.tool(
     'request-fulfillment',
-    'Request fulfillment for an order (tracking can be added later with add-tracking)',
+    'Request fulfillment using either an order ID or a direct fulfillment order ID (tracking can be added later with add-tracking)',
     {
-      orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
+      // Option 1: Provide an Order ID and we'll find the fulfillment order
+      orderId: z.string().optional().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
+      // Option 2: Provide the fulfillment order ID directly
+      fulfillmentOrderId: z.string().optional().describe('The direct fulfillment order ID (e.g., gid://shopify/FulfillmentOrder/123456789)'),
     },
-    async ({ orderId }) => {
+    async ({ orderId, fulfillmentOrderId }) => {
+      // Require exactly one of orderId or fulfillmentOrderId
+      if ((!orderId && !fulfillmentOrderId) || (orderId && fulfillmentOrderId)) {
+        return formatErrorResponse('You must provide either orderId OR fulfillmentOrderId, but not both');
+      }
       try {
-        // Check if it's a friendly order number and convert it to an ID if needed
-        const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
-        let shopifyOrderId = orderId;
+        let fulfillmentOrderToSubmit: string;
         
-        if (isOrderNumber) {
-          // Extract just the number part if it has a # prefix
-          const orderNumber = orderId.replace(/^#/, '');
+        // Option 1: If orderId is provided, find the fulfillment order ID
+        if (orderId) {
+          // Check if it's a friendly order number and convert it to an ID if needed
+          const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
+          let shopifyOrderId = orderId;
           
-          // Find the order by its number first
-          const response = await executeGraphQL<{ orders: { edges: Array<{ node: any }> } }>(
-            FIND_ORDER_BY_NUMBER, 
-            { query: `name:${orderNumber}` }
-          );
-          
-          if (!response.orders || !response.orders.edges || response.orders.edges.length === 0) {
-            return formatErrorResponse(`Order ${orderId} not found`);
+          if (isOrderNumber) {
+            // Extract just the number part if it has a # prefix
+            const orderNumber = orderId.replace(/^#/, '');
+            
+            // Find the order by its number first
+            console.error(`Finding order by number: ${orderNumber}`);
+            const response = await executeGraphQL<{ orders: { edges: Array<{ node: any }> } }>(
+              FIND_ORDER_BY_NUMBER, 
+              { query: `name:${orderNumber}` }
+            );
+            
+            if (!response.orders || !response.orders.edges || response.orders.edges.length === 0) {
+              return formatErrorResponse(`Order ${orderId} not found`);
+            }
+            
+            // Use the actual Shopify ID for the fulfillment
+            shopifyOrderId = response.orders.edges[0].node.id;
+            console.error(`Found order with ID: ${shopifyOrderId}`);
+          } else if (!orderId.includes('gid://shopify/Order/')) {
+            // Convert plain IDs to Shopify GraphQL IDs
+            shopifyOrderId = `gid://shopify/Order/${orderId}`;
           }
           
-          // Use the actual Shopify ID for the fulfillment
-          shopifyOrderId = response.orders.edges[0].node.id;
-        } else if (!orderId.includes('gid://shopify/Order/')) {
-          // Convert plain IDs to Shopify GraphQL IDs
-          shopifyOrderId = `gid://shopify/Order/${orderId}`;
+          // First, get the fulfillment orders for this order
+          console.error(`Getting fulfillment orders for order: ${shopifyOrderId}`);
+          const fulfillmentOrdersResponse = await executeGraphQL<FulfillmentOrdersResponse>(
+            GET_FULFILLMENT_ORDERS, 
+            { orderId: shopifyOrderId }
+          );
+          
+          if (!fulfillmentOrdersResponse.order || 
+              !fulfillmentOrdersResponse.order.fulfillmentOrders || 
+              !fulfillmentOrdersResponse.order.fulfillmentOrders.edges ||
+              fulfillmentOrdersResponse.order.fulfillmentOrders.edges.length === 0) {
+            return formatErrorResponse(`No fulfillment orders found for order ${orderId}`);
+          }
+          
+          // Get the first available fulfillment order
+          const fulfillmentOrder = fulfillmentOrdersResponse.order.fulfillmentOrders.edges[0].node;
+          fulfillmentOrderToSubmit = fulfillmentOrder.id;
+          console.error(`Found fulfillment order with ID: ${fulfillmentOrderToSubmit} for order ${orderId}`);
+        } 
+        // Option 2: Use the provided fulfillment order ID directly
+        else {
+          // Ensure the fulfillment order ID has the proper format
+          fulfillmentOrderToSubmit = fulfillmentOrderId!;
+          if (!fulfillmentOrderToSubmit.includes('gid://shopify/FulfillmentOrder/')) {
+            fulfillmentOrderToSubmit = `gid://shopify/FulfillmentOrder/${fulfillmentOrderToSubmit}`;
+          }
+          console.error(`Using provided fulfillment order ID: ${fulfillmentOrderToSubmit}`);
         }
-        
-        // Simple fulfillment with no line items or tracking info
-        
-        // First, get the fulfillment orders for this order
-        console.error(`Getting fulfillment orders for order: ${shopifyOrderId}`);
-        const fulfillmentOrdersResponse = await executeGraphQL<FulfillmentOrdersResponse>(
-          GET_FULFILLMENT_ORDERS, 
-          { orderId: shopifyOrderId }
-        );
-        
-        if (!fulfillmentOrdersResponse.order || 
-            !fulfillmentOrdersResponse.order.fulfillmentOrders || 
-            !fulfillmentOrdersResponse.order.fulfillmentOrders.edges ||
-            fulfillmentOrdersResponse.order.fulfillmentOrders.edges.length === 0) {
-          return formatErrorResponse(`No fulfillment orders found for order ${orderId}`);
-        }
-        
-        // Get the first available fulfillment order
-        const fulfillmentOrder = fulfillmentOrdersResponse.order.fulfillmentOrders.edges[0].node;
-        console.error(`Found fulfillment order with ID: ${fulfillmentOrder.id}`);
-        
-        // No tracking info needed for fulfillment request
-        
-        // Simply log the fulfillment order details
-        console.error(`Using fulfillment order: ${fulfillmentOrder.id} with status ${fulfillmentOrder.status}`);
         
         // Submit the fulfillment request
-        console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrder.id}`);
+        console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrderToSubmit}`);
         const submitResponse = await executeGraphQL<SubmitFulfillmentResponse>(
           SUBMIT_FULFILLMENT_REQUEST, 
           { 
-            id: fulfillmentOrder.id
+            id: fulfillmentOrderToSubmit
           }
         );
         
@@ -432,8 +449,12 @@ export function registerOrderTools(server: McpServer) {
           return formatErrorResponse(userErrors[0].message);
         }
           
+        // Create a success message with the appropriate context
+        const orderContext = orderId ? `Order ${orderId}` : `Fulfillment order ${fulfillmentOrderId}`;
+        
         return formatTextResponse(
-          `Order ${orderId} fulfillment request submitted successfully.\n` +
+          `${orderContext} fulfillment request submitted successfully.\n` +
+          `Fulfillment Order ID: ${submittedFulfillmentOrder.id}\n` +
           `Original status: ${originalFulfillmentOrder.status} (${originalFulfillmentOrder.requestStatus})\n` +
           `New status: ${submittedFulfillmentOrder.status} (${submittedFulfillmentOrder.requestStatus})` +
           (unsubmittedFulfillmentOrder ? 
