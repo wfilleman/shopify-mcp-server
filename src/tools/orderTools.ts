@@ -39,7 +39,7 @@ interface FulfillmentOrdersResponse {
                   id: string;
                   name: string;
                 };
-                quantity: number;
+                remainingQuantity: number;
               };
             }>;
           };
@@ -207,7 +207,8 @@ const GET_FULFILLMENT_ORDERS = `
                     id
                     name
                   }
-                  quantity
+                  # FulfillmentOrderLineItem has 'remainingQuantity' instead of 'quantity'
+                  remainingQuantity
                 }
               }
             }
