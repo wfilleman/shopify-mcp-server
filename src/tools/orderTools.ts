@@ -152,9 +152,9 @@ const GET_ACTIVE_ORDERS = `
 
 // GraphQL Mutations
 const FULFILL_ORDER = `
-  mutation FulfillOrderItems($input: FulfillmentInput!) {
+  mutation FulfillOrderItems($fulfillment: FulfillmentInput!) {
     fulfillmentCreate(
-      input: $input
+      fulfillment: $fulfillment
     ) {
       fulfillment {
         id
@@ -342,7 +342,7 @@ export function registerOrderTools(server: McpServer) {
         
         // Use the standard structure for FulfillmentInput
         const response = await executeGraphQL<FulfillmentCreateResponse>(FULFILL_ORDER, {
-          input: {
+          fulfillment: {
             lineItems: lineItems.map(item => ({
               id: item.id,
               quantity: item.quantity || 1
