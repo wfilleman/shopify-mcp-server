@@ -152,7 +152,7 @@ const GET_ACTIVE_ORDERS = `
 
 // GraphQL Mutations
 const FULFILL_ORDER = `
-  mutation FulfillOrderItems($orderId: ID!, $lineItems: [FulfillmentLineItemInput!]!, $trackingInfo: FulfillmentTrackingInput) {
+  mutation FulfillOrderItems($orderId: ID!, $lineItems: [FulfillmentLineItemsByIDInput!]!, $trackingInfo: FulfillmentTrackingInput) {
     fulfillmentCreateV2(
       fulfillment: {
         lineItems: $lineItems,
@@ -331,7 +331,7 @@ export function registerOrderTools(server: McpServer) {
         }
         
         const lineItemInputs = lineItems.map(item => ({
-          lineItemId: item.id,
+          id: item.id,
           quantity: item.quantity,
         }));
         
