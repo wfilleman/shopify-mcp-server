@@ -298,8 +298,9 @@ export function registerOrderTools(server: McpServer) {
       trackingNumber: z.string().optional().describe('Optional tracking number'),
       trackingCompany: z.string().optional().describe('Optional tracking company'),
       trackingUrl: z.string().optional().describe('Optional tracking URL'),
+      notifyCustomer: z.boolean().optional().default(false).describe('Whether to notify the customer about the fulfillment (defaults to false)'),
     },
-    async ({ orderId, lineItems, trackingNumber, trackingCompany, trackingUrl }) => {
+    async ({ orderId, lineItems, trackingNumber, trackingCompany, trackingUrl, notifyCustomer }) => {
       try {
         // Check if it's a friendly order number and convert it to an ID if needed
         const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
@@ -347,7 +348,7 @@ export function registerOrderTools(server: McpServer) {
               quantity: item.quantity || 1
             })),
             orderId: shopifyOrderId,
-            notifyCustomer: true,
+            notifyCustomer: notifyCustomer || false,
             trackingInfo: trackingNumber ? {
               number: trackingNumber,
               company: trackingCompany || undefined,
