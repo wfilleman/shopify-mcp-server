@@ -221,8 +221,16 @@ const GET_FULFILLMENT_ORDERS = `
 
 // Then we submit the fulfillment order for fulfillment
 const SUBMIT_FULFILLMENT_REQUEST = `
-  mutation fulfillmentOrderSubmitFulfillmentRequest($id: ID!) {
-    fulfillmentOrderSubmitFulfillmentRequest(id: $id) {
+  mutation fulfillmentOrderSubmitFulfillmentRequest(
+    $id: ID!, 
+    $fulfillmentOrderLineItems: [FulfillmentOrderLineItemInput!]
+  ) {
+    fulfillmentOrderSubmitFulfillmentRequest(
+      id: $id,
+      fulfillmentOrderLineItems: $fulfillmentOrderLineItems,
+      message: "", 
+      notifyCustomer: false
+    ) {
       originalFulfillmentOrder {
         id
         status
@@ -367,8 +375,16 @@ export function registerOrderTools(server: McpServer) {
       orderId: z.string().optional().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
       // Option 2: Provide the fulfillment order ID directly
       fulfillmentOrderId: z.string().optional().describe('The direct fulfillment order ID (e.g., gid://shopify/FulfillmentOrder/123456789)'),
+      // Optional line items to fulfill - if not provided, all items will be fulfilled
+      lineItems: z.array(
+        z.object({
+          // This should be the FulfillmentOrderLineItem ID, not the regular LineItem ID
+          id: z.string().describe('The FulfillmentOrderLineItem ID (e.g., gid://shopify/FulfillmentOrderLineItem/123456789)'),
+          quantity: z.number().min(1).default(1).describe('Quantity to fulfill'),
+        })
+      ).optional().describe('Specific line items to fulfill (if not provided, all items will be fulfilled)'),
     },
-    async ({ orderId, fulfillmentOrderId }) => {
+    async ({ orderId, fulfillmentOrderId, lineItems }) => {
       // Require exactly one of orderId or fulfillmentOrderId
       if ((!orderId && !fulfillmentOrderId) || (orderId && fulfillmentOrderId)) {
         return formatErrorResponse('You must provide either orderId OR fulfillmentOrderId, but not both');
@@ -434,12 +450,36 @@ export function registerOrderTools(server: McpServer) {
           console.error(`Using provided fulfillment order ID: ${fulfillmentOrderToSubmit}`);
         }
         
+        // Prepare line items if provided
+        let fulfillmentOrderLineItems = undefined;
+        
+        if (lineItems && lineItems.length > 0) {
+          // Map user-provided line items to the format expected by the API
+          fulfillmentOrderLineItems = lineItems.map(item => {
+            // Ensure proper ID format for fulfillment order line items
+            let lineItemId = item.id;
+            if (!lineItemId.includes('gid://shopify/FulfillmentOrderLineItem/')) {
+              lineItemId = `gid://shopify/FulfillmentOrderLineItem/${lineItemId}`;
+            }
+            
+            return {
+              id: lineItemId,
+              quantity: item.quantity || 1
+            };
+          });
+          
+          console.error(`Using ${fulfillmentOrderLineItems.length} specific line items for fulfillment`);
+        } else {
+          console.error('No specific line items provided, fulfilling all available items');
+        }
+        
         // Submit the fulfillment request
         console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrderToSubmit}`);
         const submitResponse = await executeGraphQL<SubmitFulfillmentResponse>(
           SUBMIT_FULFILLMENT_REQUEST, 
           { 
-            id: fulfillmentOrderToSubmit
+            id: fulfillmentOrderToSubmit,
+            fulfillmentOrderLineItems
           }
         );
         
@@ -452,9 +492,12 @@ export function registerOrderTools(server: McpServer) {
           
         // Create a success message with the appropriate context
         const orderContext = orderId ? `Order ${orderId}` : `Fulfillment order ${fulfillmentOrderId}`;
+        const lineItemsContext = lineItems && lineItems.length > 0 ? 
+          ` (${lineItems.length} specific line items)` : 
+          ' (all items)';
         
         return formatTextResponse(
-          `${orderContext} fulfillment request submitted successfully.\n` +
+          `${orderContext}${lineItemsContext} fulfillment request submitted successfully.\n` +
           `Fulfillment Order ID: ${submittedFulfillmentOrder.id}\n` +
           `Original status: ${originalFulfillmentOrder.status} (${originalFulfillmentOrder.requestStatus})\n` +
           `New status: ${submittedFulfillmentOrder.status} (${submittedFulfillmentOrder.requestStatus})` +
