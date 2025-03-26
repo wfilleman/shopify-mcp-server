@@ -21,14 +21,40 @@ interface OrdersResponse {
   };
 }
 
-interface FulfillmentCreateResponse {
-  fulfillmentCreate: {
-    fulfillment: {
+interface FulfillmentOrdersResponse {
+  order: {
+    id: string;
+    name: string;
+    fulfillmentOrders: {
+      edges: Array<{
+        node: {
+          id: string;
+          status: string;
+          requestStatus: string;
+          lineItems: {
+            edges: Array<{
+              node: {
+                id: string;
+                lineItem: {
+                  id: string;
+                  name: string;
+                };
+                quantity: number;
+              };
+            }>;
+          };
+        };
+      }>;
+    };
+  };
+}
+
+interface SubmitFulfillmentResponse {
+  fulfillmentOrderSubmitFulfillmentRequest: {
+    submittedFulfillmentOrder: {
       id: string;
-      trackingInfo?: {
-        number?: string;
-        url?: string;
-      };
+      status: string;
+      requestStatus: string;
     };
     userErrors: Array<{
       field: string;
@@ -151,17 +177,49 @@ const GET_ACTIVE_ORDERS = `
 `;
 
 // GraphQL Mutations
-const FULFILL_ORDER = `
-  mutation FulfillOrderItems($fulfillment: FulfillmentInput!) {
-    fulfillmentCreate(
-      fulfillment: $fulfillment
-    ) {
-      fulfillment {
-        id
-        trackingInfo {
-          number
-          url
+// First, we need to get the fulfillment orders for an order
+const GET_FULFILLMENT_ORDERS = `
+  query GetFulfillmentOrders($orderId: ID!) {
+    order(id: $orderId) {
+      id
+      name
+      fulfillmentOrders(first: 10) {
+        edges {
+          node {
+            id
+            status
+            requestStatus
+            lineItems(first: 10) {
+              edges {
+                node {
+                  id
+                  lineItem {
+                    id
+                    name
+                  }
+                  quantity
+                }
+              }
+            }
+          }
         }
+      }
+    }
+  }
+`;
+
+// Then we submit the fulfillment order for fulfillment
+const SUBMIT_FULFILLMENT_REQUEST = `
+  mutation SubmitFulfillmentRequest($id: ID!, $notifyCustomer: Boolean, $trackingInfo: FulfillmentOrderTrackingInput) {
+    fulfillmentOrderSubmitFulfillmentRequest(
+      id: $id,
+      notifyCustomer: $notifyCustomer,
+      trackingInfo: $trackingInfo
+    ) {
+      submittedFulfillmentOrder {
+        id
+        status
+        requestStatus
       }
       userErrors {
         field
@@ -340,30 +398,49 @@ export function registerOrderTools(server: McpServer) {
             }
           : undefined;
         
-        // Use the standard structure for FulfillmentInput
-        const response = await executeGraphQL<FulfillmentCreateResponse>(FULFILL_ORDER, {
-          fulfillment: {
-            lineItems: lineItems.map(item => ({
-              id: item.id,
-              quantity: item.quantity || 1
-            })),
-            orderId: shopifyOrderId,
-            notifyCustomer: notifyCustomer || false,
-            trackingInfo: trackingNumber ? {
-              number: trackingNumber,
-              company: trackingCompany || undefined,
-              url: trackingUrl || undefined
-            } : undefined
-          }
-        });
+        // First, get the fulfillment orders for this order
+        console.error(`Getting fulfillment orders for order: ${shopifyOrderId}`);
+        const fulfillmentOrdersResponse = await executeGraphQL<FulfillmentOrdersResponse>(
+          GET_FULFILLMENT_ORDERS, 
+          { orderId: shopifyOrderId }
+        );
         
-        const { fulfillment, userErrors } = response.fulfillmentCreate;
+        if (!fulfillmentOrdersResponse.order || 
+            !fulfillmentOrdersResponse.order.fulfillmentOrders || 
+            !fulfillmentOrdersResponse.order.fulfillmentOrders.edges ||
+            fulfillmentOrdersResponse.order.fulfillmentOrders.edges.length === 0) {
+          return formatErrorResponse(`No fulfillment orders found for order ${orderId}`);
+        }
+        
+        // Get the first available fulfillment order
+        const fulfillmentOrder = fulfillmentOrdersResponse.order.fulfillmentOrders.edges[0].node;
+        console.error(`Found fulfillment order with ID: ${fulfillmentOrder.id}`);
+        
+        // Create tracking info if provided
+        const trackingInfoInput = trackingNumber ? {
+          number: trackingNumber,
+          company: trackingCompany || undefined,
+          url: trackingUrl || undefined
+        } : undefined;
+        
+        // Submit the fulfillment request
+        console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrder.id}`);
+        const submitResponse = await executeGraphQL<SubmitFulfillmentResponse>(
+          SUBMIT_FULFILLMENT_REQUEST, 
+          { 
+            id: fulfillmentOrder.id,
+            notifyCustomer: notifyCustomer || false,
+            trackingInfo: trackingInfoInput
+          }
+        );
+        
+        const { submittedFulfillmentOrder, userErrors } = submitResponse.fulfillmentOrderSubmitFulfillmentRequest;
         
         if (userErrors && userErrors.length > 0) {
           return formatErrorResponse(userErrors[0].message);
         }
         
-        return formatTextResponse(`Order ${orderId} fulfilled successfully. Fulfillment ID: ${fulfillment.id}`);
+        return formatTextResponse(`Order ${orderId} fulfillment request submitted successfully. Status: ${submittedFulfillmentOrder.status}`);
       } catch (error) {
         return formatErrorResponse(error instanceof Error ? error : String(error));
       }
