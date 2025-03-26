@@ -212,13 +212,11 @@ const GET_FULFILLMENT_ORDERS = `
 const SUBMIT_FULFILLMENT_REQUEST = `
   mutation SubmitFulfillmentRequest(
     $id: ID!, 
-    $notifyCustomer: Boolean, 
-    $trackingInfo: FulfillmentOrderTrackingInput
+    $notifyCustomer: Boolean
   ) {
     fulfillmentOrderSubmitFulfillmentRequest(
       id: $id,
-      notifyCustomer: $notifyCustomer,
-      trackingInfo: $trackingInfo
+      notifyCustomer: $notifyCustomer
     ) {
       submittedFulfillmentOrder {
         id
@@ -348,21 +346,12 @@ export function registerOrderTools(server: McpServer) {
   // Request fulfillment
   server.tool(
     'request-fulfillment',
-    'Fulfill an order with optional tracking information',
+    'Request fulfillment for an order (tracking can be added later with add-tracking)',
     {
       orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
-      lineItems: z.array(
-        z.object({
-          id: z.string().describe('Line item ID'),
-          quantity: z.number().default(1).describe('Quantity to fulfill'),
-        })
-      ).optional().describe('Line items to fulfill (currently not used - entire order will be fulfilled)'),
-      trackingNumber: z.string().optional().describe('Optional tracking number'),
-      trackingCompany: z.string().optional().describe('Optional tracking company'),
-      trackingUrl: z.string().optional().describe('Optional tracking URL'),
       notifyCustomer: z.boolean().optional().default(false).describe('Whether to notify the customer about the fulfillment (defaults to false)'),
     },
-    async ({ orderId, lineItems, trackingNumber, trackingCompany, trackingUrl, notifyCustomer }) => {
+    async ({ orderId, notifyCustomer }) => {
       try {
         // Check if it's a friendly order number and convert it to an ID if needed
         const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
@@ -389,15 +378,7 @@ export function registerOrderTools(server: McpServer) {
           shopifyOrderId = `gid://shopify/Order/${orderId}`;
         }
         
-        // We no longer use line items since we're fulfilling the entire order
-        
-        const trackingInfo = trackingNumber 
-          ? {
-              number: trackingNumber,
-              company: trackingCompany,
-              url: trackingUrl,
-            }
-          : undefined;
+        // Simple fulfillment with no line items or tracking info
         
         // First, get the fulfillment orders for this order
         console.error(`Getting fulfillment orders for order: ${shopifyOrderId}`);
@@ -417,12 +398,7 @@ export function registerOrderTools(server: McpServer) {
         const fulfillmentOrder = fulfillmentOrdersResponse.order.fulfillmentOrders.edges[0].node;
         console.error(`Found fulfillment order with ID: ${fulfillmentOrder.id}`);
         
-        // Create tracking info if provided
-        const trackingInfoInput = trackingNumber ? {
-          number: trackingNumber,
-          company: trackingCompany || undefined,
-          url: trackingUrl || undefined
-        } : undefined;
+        // No tracking info needed for fulfillment request
         
         // Simply log the fulfillment order details
         console.error(`Using fulfillment order: ${fulfillmentOrder.id} with status ${fulfillmentOrder.status}`);
@@ -433,8 +409,7 @@ export function registerOrderTools(server: McpServer) {
           SUBMIT_FULFILLMENT_REQUEST, 
           { 
             id: fulfillmentOrder.id,
-            notifyCustomer: notifyCustomer || false,
-            trackingInfo: trackingInfoInput
+            notifyCustomer: notifyCustomer || false
           }
         );
         
