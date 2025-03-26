@@ -22,7 +22,7 @@ interface OrdersResponse {
 }
 
 interface FulfillmentCreateResponse {
-  fulfillOrder: {
+  fulfillmentCreate: {
     fulfillment: {
       id: string;
       trackingInfo?: {
@@ -152,8 +152,8 @@ const GET_ACTIVE_ORDERS = `
 
 // GraphQL Mutations
 const FULFILL_ORDER = `
-  mutation FulfillOrderItems($input: OrderFulfillmentInput!) {
-    fulfillOrder(
+  mutation FulfillOrderItems($input: FulfillmentInput!) {
+    fulfillmentCreate(
       input: $input
     ) {
       fulfillment {
@@ -339,18 +339,24 @@ export function registerOrderTools(server: McpServer) {
             }
           : undefined;
         
+        // Use the standard structure for FulfillmentInput
         const response = await executeGraphQL<FulfillmentCreateResponse>(FULFILL_ORDER, {
           input: {
-            orderId: shopifyOrderId,
             lineItems: lineItems.map(item => ({
               id: item.id,
               quantity: item.quantity || 1
             })),
-            trackingInfo
+            orderId: shopifyOrderId,
+            notifyCustomer: true,
+            trackingInfo: trackingNumber ? {
+              number: trackingNumber,
+              company: trackingCompany || undefined,
+              url: trackingUrl || undefined
+            } : undefined
           }
         });
         
-        const { fulfillment, userErrors } = response.fulfillOrder;
+        const { fulfillment, userErrors } = response.fulfillmentCreate;
         
         if (userErrors && userErrors.length > 0) {
           return formatErrorResponse(userErrors[0].message);
