@@ -213,14 +213,12 @@ const SUBMIT_FULFILLMENT_REQUEST = `
   mutation SubmitFulfillmentRequest(
     $id: ID!, 
     $notifyCustomer: Boolean, 
-    $trackingInfo: FulfillmentOrderTrackingInput,
-    $fulfillmentOrderLineItems: [FulfillmentOrderLineItemInput!]
+    $trackingInfo: FulfillmentOrderTrackingInput
   ) {
     fulfillmentOrderSubmitFulfillmentRequest(
       id: $id,
       notifyCustomer: $notifyCustomer,
-      trackingInfo: $trackingInfo,
-      fulfillmentOrderLineItems: $fulfillmentOrderLineItems
+      trackingInfo: $trackingInfo
     ) {
       submittedFulfillmentOrder {
         id
@@ -358,7 +356,7 @@ export function registerOrderTools(server: McpServer) {
           id: z.string().describe('Line item ID'),
           quantity: z.number().default(1).describe('Quantity to fulfill'),
         })
-      ).describe('Line items to fulfill'),
+      ).optional().describe('Line items to fulfill (currently not used - entire order will be fulfilled)'),
       trackingNumber: z.string().optional().describe('Optional tracking number'),
       trackingCompany: z.string().optional().describe('Optional tracking company'),
       trackingUrl: z.string().optional().describe('Optional tracking URL'),
@@ -391,10 +389,7 @@ export function registerOrderTools(server: McpServer) {
           shopifyOrderId = `gid://shopify/Order/${orderId}`;
         }
         
-        const lineItemInputs = lineItems.map(item => ({
-          id: item.id,
-          quantity: item.quantity,
-        }));
+        // We no longer use line items since we're fulfilling the entire order
         
         const trackingInfo = trackingNumber 
           ? {
@@ -429,41 +424,8 @@ export function registerOrderTools(server: McpServer) {
           url: trackingUrl || undefined
         } : undefined;
         
-        // Map our line items to fulfillment order line items
-        // First, create a map of line item IDs to quantities
-        const lineItemQuantities = new Map();
-        lineItems.forEach(item => {
-          lineItemQuantities.set(item.id, item.quantity || 1);
-        });
-        
-        // Log available fulfillment order line items for debugging
-        console.error('Available fulfillment order line items:', 
-          JSON.stringify(fulfillmentOrder.lineItems.edges.map(edge => ({
-            id: edge.node.id,
-            lineItemId: edge.node.lineItem.id,
-            name: edge.node.lineItem.name,
-            quantity: edge.node.quantity
-          })), null, 2)
-        );
-        
-        console.error('Requested line items:', 
-          JSON.stringify(Array.from(lineItemQuantities.entries()), null, 2)
-        );
-        
-        // Find matching fulfillment order line items
-        const fulfillmentOrderLineItems = fulfillmentOrder.lineItems.edges
-          .filter(edge => lineItemQuantities.has(edge.node.lineItem.id))
-          .map(edge => ({
-            id: edge.node.id,
-            quantity: Math.min(
-              lineItemQuantities.get(edge.node.lineItem.id),
-              edge.node.quantity
-            )
-          }));
-        
-        console.error(`Mapped ${fulfillmentOrderLineItems.length} line items for fulfillment:`,
-          JSON.stringify(fulfillmentOrderLineItems, null, 2)
-        );
+        // Simply log the fulfillment order details
+        console.error(`Using fulfillment order: ${fulfillmentOrder.id} with status ${fulfillmentOrder.status}`);
         
         // Submit the fulfillment request
         console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrder.id}`);
@@ -472,8 +434,7 @@ export function registerOrderTools(server: McpServer) {
           { 
             id: fulfillmentOrder.id,
             notifyCustomer: notifyCustomer || false,
-            trackingInfo: trackingInfoInput,
-            fulfillmentOrderLineItems: fulfillmentOrderLineItems.length > 0 ? fulfillmentOrderLineItems : undefined
+            trackingInfo: trackingInfoInput
           }
         );
         
