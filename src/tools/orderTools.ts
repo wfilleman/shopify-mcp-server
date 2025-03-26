@@ -51,11 +51,21 @@ interface FulfillmentOrdersResponse {
 
 interface SubmitFulfillmentResponse {
   fulfillmentOrderSubmitFulfillmentRequest: {
+    originalFulfillmentOrder: {
+      id: string;
+      status: string;
+      requestStatus: string;
+    };
     submittedFulfillmentOrder: {
       id: string;
       status: string;
       requestStatus: string;
     };
+    unsubmittedFulfillmentOrder: {
+      id: string;
+      status: string;
+      requestStatus: string;
+    } | null;
     userErrors: Array<{
       field: string;
       message: string;
@@ -210,15 +220,19 @@ const GET_FULFILLMENT_ORDERS = `
 
 // Then we submit the fulfillment order for fulfillment
 const SUBMIT_FULFILLMENT_REQUEST = `
-  mutation SubmitFulfillmentRequest(
-    $id: ID!, 
-    $notifyCustomer: Boolean
-  ) {
-    fulfillmentOrderSubmitFulfillmentRequest(
-      id: $id,
-      notifyCustomer: $notifyCustomer
-    ) {
+  mutation fulfillmentOrderSubmitFulfillmentRequest($id: ID!) {
+    fulfillmentOrderSubmitFulfillmentRequest(id: $id) {
+      originalFulfillmentOrder {
+        id
+        status
+        requestStatus
+      }
       submittedFulfillmentOrder {
+        id
+        status
+        requestStatus
+      }
+      unsubmittedFulfillmentOrder {
         id
         status
         requestStatus
@@ -349,9 +363,8 @@ export function registerOrderTools(server: McpServer) {
     'Request fulfillment for an order (tracking can be added later with add-tracking)',
     {
       orderId: z.string().describe('The order ID or order number (e.g., #1001, 1001, or full Shopify ID)'),
-      notifyCustomer: z.boolean().optional().default(false).describe('Whether to notify the customer about the fulfillment (defaults to false)'),
     },
-    async ({ orderId, notifyCustomer }) => {
+    async ({ orderId }) => {
       try {
         // Check if it's a friendly order number and convert it to an ID if needed
         const isOrderNumber = /^#?\d+$/.test(orderId) && !orderId.includes('/');
@@ -408,18 +421,25 @@ export function registerOrderTools(server: McpServer) {
         const submitResponse = await executeGraphQL<SubmitFulfillmentResponse>(
           SUBMIT_FULFILLMENT_REQUEST, 
           { 
-            id: fulfillmentOrder.id,
-            notifyCustomer: notifyCustomer || false
+            id: fulfillmentOrder.id
           }
         );
         
-        const { submittedFulfillmentOrder, userErrors } = submitResponse.fulfillmentOrderSubmitFulfillmentRequest;
+        const { userErrors, originalFulfillmentOrder, submittedFulfillmentOrder, unsubmittedFulfillmentOrder } = 
+          submitResponse.fulfillmentOrderSubmitFulfillmentRequest;
         
         if (userErrors && userErrors.length > 0) {
           return formatErrorResponse(userErrors[0].message);
         }
-        
-        return formatTextResponse(`Order ${orderId} fulfillment request submitted successfully. Status: ${submittedFulfillmentOrder.status}`);
+          
+        return formatTextResponse(
+          `Order ${orderId} fulfillment request submitted successfully.\n` +
+          `Original status: ${originalFulfillmentOrder.status} (${originalFulfillmentOrder.requestStatus})\n` +
+          `New status: ${submittedFulfillmentOrder.status} (${submittedFulfillmentOrder.requestStatus})` +
+          (unsubmittedFulfillmentOrder ? 
+            `\nRemaining items: ${unsubmittedFulfillmentOrder.status} (${unsubmittedFulfillmentOrder.requestStatus})` : 
+            '')
+        );
       } catch (error) {
         return formatErrorResponse(error instanceof Error ? error : String(error));
       }
