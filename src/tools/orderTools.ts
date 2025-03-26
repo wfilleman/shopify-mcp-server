@@ -210,11 +210,17 @@ const GET_FULFILLMENT_ORDERS = `
 
 // Then we submit the fulfillment order for fulfillment
 const SUBMIT_FULFILLMENT_REQUEST = `
-  mutation SubmitFulfillmentRequest($id: ID!, $notifyCustomer: Boolean, $trackingInfo: FulfillmentOrderTrackingInput) {
+  mutation SubmitFulfillmentRequest(
+    $id: ID!, 
+    $notifyCustomer: Boolean, 
+    $trackingInfo: FulfillmentOrderTrackingInput,
+    $fulfillmentOrderLineItems: [FulfillmentOrderLineItemInput!]
+  ) {
     fulfillmentOrderSubmitFulfillmentRequest(
       id: $id,
       notifyCustomer: $notifyCustomer,
-      trackingInfo: $trackingInfo
+      trackingInfo: $trackingInfo,
+      fulfillmentOrderLineItems: $fulfillmentOrderLineItems
     ) {
       submittedFulfillmentOrder {
         id
@@ -423,6 +429,42 @@ export function registerOrderTools(server: McpServer) {
           url: trackingUrl || undefined
         } : undefined;
         
+        // Map our line items to fulfillment order line items
+        // First, create a map of line item IDs to quantities
+        const lineItemQuantities = new Map();
+        lineItems.forEach(item => {
+          lineItemQuantities.set(item.id, item.quantity || 1);
+        });
+        
+        // Log available fulfillment order line items for debugging
+        console.error('Available fulfillment order line items:', 
+          JSON.stringify(fulfillmentOrder.lineItems.edges.map(edge => ({
+            id: edge.node.id,
+            lineItemId: edge.node.lineItem.id,
+            name: edge.node.lineItem.name,
+            quantity: edge.node.quantity
+          })), null, 2)
+        );
+        
+        console.error('Requested line items:', 
+          JSON.stringify(Array.from(lineItemQuantities.entries()), null, 2)
+        );
+        
+        // Find matching fulfillment order line items
+        const fulfillmentOrderLineItems = fulfillmentOrder.lineItems.edges
+          .filter(edge => lineItemQuantities.has(edge.node.lineItem.id))
+          .map(edge => ({
+            id: edge.node.id,
+            quantity: Math.min(
+              lineItemQuantities.get(edge.node.lineItem.id),
+              edge.node.quantity
+            )
+          }));
+        
+        console.error(`Mapped ${fulfillmentOrderLineItems.length} line items for fulfillment:`,
+          JSON.stringify(fulfillmentOrderLineItems, null, 2)
+        );
+        
         // Submit the fulfillment request
         console.error(`Submitting fulfillment request for fulfillment order: ${fulfillmentOrder.id}`);
         const submitResponse = await executeGraphQL<SubmitFulfillmentResponse>(
@@ -430,7 +472,8 @@ export function registerOrderTools(server: McpServer) {
           { 
             id: fulfillmentOrder.id,
             notifyCustomer: notifyCustomer || false,
-            trackingInfo: trackingInfoInput
+            trackingInfo: trackingInfoInput,
+            fulfillmentOrderLineItems: fulfillmentOrderLineItems.length > 0 ? fulfillmentOrderLineItems : undefined
           }
         );
         
